@@ -1,0 +1,564 @@
+
+ <!DOCTYPE HTML>
+<html >
+<head>
+  <meta charset="UTF-8">
+  
+    <title>BUG 分析: 大量 D 进程卡在 shrink_inactive_list 导致 SWT | Lotte&#39;s Blog</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1,user-scalable=no">
+    
+    <meta name="author" content="Lotte">
+    
+
+    <meta name="keywords" content="memory,memory reclaim">
+    <meta name="description" content="Description一个项目出现 D 进程卡住导致 android SWT 的问题，前前后后，提交了 3 次，解决或者缓解 SWT 问题。
+AnalysisLOG：
+1234567891011121314151617181920212223242526272829303132333435363738394041424344[149459.897408] [3:2065:watchdog] Bin">
+<meta property="og:type" content="article">
+<meta property="og:title" content="BUG 分析: 大量 D 进程卡在 shrink_inactive_list 导致 SWT">
+<meta property="og:url" content="http://lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/index.html">
+<meta property="og:site_name" content="Lotte's Blog">
+<meta property="og:description" content="Description一个项目出现 D 进程卡住导致 android SWT 的问题，前前后后，提交了 3 次，解决或者缓解 SWT 问题。
+AnalysisLOG：
+1234567891011121314151617181920212223242526272829303132333435363738394041424344[149459.897408] [3:2065:watchdog] Bin">
+<meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/systrace_D.jpg">
+<meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/page_cache1.png">
+<meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/kswapd1.png">
+<meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/kswapd2.png">
+<meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/memory_reclaim.png">
+<meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/shrink_inactive_list.png">
+<meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/shrink_page_list.png">
+<meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/mm_vmscan_lru_shrink_inactive.png">
+<meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/mm_vmscan_writepage.png">
+<meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/global_dirty_state.png">
+<meta property="og:updated_time" content="2019-10-23T06:28:30.887Z">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="BUG 分析: 大量 D 进程卡在 shrink_inactive_list 导致 SWT">
+<meta name="twitter:description" content="Description一个项目出现 D 进程卡住导致 android SWT 的问题，前前后后，提交了 3 次，解决或者缓解 SWT 问题。
+AnalysisLOG：
+1234567891011121314151617181920212223242526272829303132333435363738394041424344[149459.897408] [3:2065:watchdog] Bin">
+<meta name="twitter:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/systrace_D.jpg">
+
+    
+    <link rel="alternative" href="/atom.xml" title="Lotte&#39;s Blog" type="application/atom+xml">
+    
+    
+    <link rel="icon" href="/img/favicon.ico">
+    
+    
+    <link rel="apple-touch-icon" href="/img/jacman.jpg">
+    <link rel="apple-touch-icon-precomposed" href="/img/jacman.jpg">
+    
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+
+  <body>
+    <header>
+      
+<div>
+		
+			<div id="imglogo">
+				<a href="/"><img src="/img/logo.png" alt="Lotte&#39;s Blog" title="Lotte&#39;s Blog"/></a>
+			</div>
+			
+			<div id="textlogo">
+				<h1 class="site-name"><a href="/" title="Lotte&#39;s Blog">Lotte&#39;s Blog</a></h1>
+				<h2 class="blog-motto">探索、记录、分享、生活</h2>
+			</div>
+			<div class="navbar"><a class="navbutton navmobile" href="#" title="Menu">
+			</a></div>
+			<nav class="animated">
+				<ul>
+					<ul>
+					 
+						<li><a href="/">Home</a></li>
+					
+						<li><a href="/archives">Archives</a></li>
+					
+						<li><a href="/about">About</a></li>
+					
+					<li>
+ 					
+					<form class="search" action="//google.com/search" method="get" accept-charset="utf-8">
+						<label>Search</label>
+						<input type="search" id="search" name="q" autocomplete="off" maxlength="20" placeholder="Search" />
+						<input type="hidden" name="q" value="site:lotte-bai.github.io">
+					</form>
+					
+					</li>
+				</ul>
+			</nav>			
+</div>
+    </header>
+    <div id="container">
+      <div id="main" class="post" itemscope itemprop="blogPost">
+  
+	<article itemprop="articleBody"> 
+		<header class="article-info clearfix">
+  <h1 itemprop="name">
+    
+      <a href="/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/" title="BUG 分析: 大量 D 进程卡在 shrink_inactive_list 导致 SWT" itemprop="url">BUG 分析: 大量 D 进程卡在 shrink_inactive_list 导致 SWT</a>
+  </h1>
+  <p class="article-author">By
+       
+		<a href="/about" title="Lotte" target="_blank" itemprop="author">Lotte</a>
+		
+  <p class="article-time">
+    <time datetime="2019-10-23T06:28:30.887Z" itemprop="datePublished"> Published 2019-10-23</time>
+    
+  </p>
+</header>
+	<div class="article-content">
+		
+		<div id="toc" class="toc-article">
+			<strong class="toc-title">Contents</strong>
+		
+			<ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#Description"><span class="toc-number">1.</span> <span class="toc-text">Description</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Analysis"><span class="toc-number">2.</span> <span class="toc-text">Analysis</span></a></li></ol>
+		
+		</div>
+		
+		<h2 id="Description"><a href="#Description" class="headerlink" title="Description"></a>Description</h2><p>一个项目出现 D 进程卡住导致 android SWT 的问题，前前后后，提交了 3 次，解决或者缓解 SWT 问题。</p>
+<h2 id="Analysis"><a href="#Analysis" class="headerlink" title="Analysis"></a>Analysis</h2><p>LOG：</p>
+<figure class="highlight fsharp"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div><div class="line">38</div><div class="line">39</div><div class="line">40</div><div class="line">41</div><div class="line">42</div><div class="line">43</div><div class="line">44</div></pre></td><td class="code"><pre><div class="line">[<span class="number">149459.897408</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] Binder:<span class="number">1042</span>_16 D <span class="number">0</span> <span class="number">9917</span> <span class="number">635</span> <span class="number">0x00000008</span></div><div class="line"> [<span class="number">149459.897427</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] Call trace:</div><div class="line"> [<span class="number">149459.897435</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf28852d4&gt;]</span> _switch_to+<span class="number">0xb4</span>/<span class="number">0xc0</span></div><div class="line"> [<span class="number">149459.897452</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf3a1f6a0&gt;]</span> _schedule+<span class="number">0x7f0</span>/<span class="number">0xad0</span></div><div class="line"> [<span class="number">149459.897468</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf3a1f9f0&gt;]</span> schedule+<span class="number">0x70</span>/<span class="number">0x90</span></div><div class="line"> [<span class="number">149459.897485</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf3a23b00&gt;]</span> schedule_timeout+<span class="number">0x548</span>/<span class="number">0x668</span></div><div class="line"> [<span class="number">149459.897502</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2959028&gt;]</span> msleep+<span class="number">0x28</span>/<span class="number">0x38</span></div><div class="line"> [<span class="number">149459.897517</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a1ff38&gt;]</span> shrink_inactive_list+<span class="number">0x118</span>/<span class="number">0x998</span></div><div class="line"> [<span class="number">149459.897534</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a1cb10&gt;]</span> shrink_node_memcg+<span class="number">0xa18</span>/<span class="number">0x1100</span></div><div class="line"> [<span class="number">149459.897552</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a1f0b0&gt;]</span> shrink_node+<span class="number">0x108</span>/<span class="number">0x2f8</span></div><div class="line"> [<span class="number">149459.897568</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a1bcb0&gt;]</span> do_try_to_free_pages+<span class="number">0x178</span>/<span class="number">0x380</span></div><div class="line"> [<span class="number">149459.897586</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a1b9d0&gt;]</span> try_to_free_pages+<span class="number">0x370</span>/<span class="number">0x4d8</span></div><div class="line"> [<span class="number">149459.897605</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a071b8&gt;]</span> _alloc_pages_nodemask+<span class="number">0x868</span>/<span class="number">0x1380</span></div><div class="line"> [<span class="number">149459.897623</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a13784&gt;]</span> __do_pagecache_readahead+<span class="number">0xbc</span>/<span class="number">0x358</span></div><div class="line"> [<span class="number">149459.897640</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf29fde4c&gt;]</span> filemapfault+<span class="number">0x11c</span>/<span class="number">0x600</span></div><div class="line"> [<span class="number">149459.897647</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2b479f8&gt;]</span> ext4_filemap_fault+<span class="number">0x30</span>/<span class="number">0x50</span></div><div class="line"> [<span class="number">149459.897664</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a47f38&gt;]</span> handle_pte_fault+<span class="number">0xb38</span>/<span class="number">0xfa8</span></div><div class="line"> [<span class="number">149459.897681</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a485c8&gt;]</span> handle_mm_fault+<span class="number">0x1d0</span>/<span class="number">0x328</span></div><div class="line"> [<span class="number">149459.897699</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf28a3668&gt;]</span> do_page_fault+<span class="number">0x2a0</span>/<span class="number">0x3e0</span></div><div class="line"> [<span class="number">149459.897716</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf28a3364&gt;]</span> do_translation_fault+<span class="number">0x44</span>/<span class="number">0xa8</span></div><div class="line"> [<span class="number">149459.897732</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2880b74&gt;]</span> do_mem_abort+<span class="number">0x4c</span>/<span class="number">0xd0</span></div><div class="line"> [<span class="number">149459.897750</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2882c78&gt;]</span> el0_da+<span class="number">0x20</span>/<span class="number">0x24</span></div><div class="line"> [<span class="number">149459.897767</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] Binder:<span class="number">1042</span>_19 D <span class="number">0</span> <span class="number">11188</span> <span class="number">635</span> <span class="number">0x00000008</span></div><div class="line"> [<span class="number">149459.897786</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] Call trace:</div><div class="line"> [<span class="number">149459.897797</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf28852d4&gt;]</span> _switch_to+<span class="number">0xb4</span>/<span class="number">0xc0</span></div><div class="line"> [<span class="number">149459.897804</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf3a1f6a0&gt;]</span> _schedule+<span class="number">0x7f0</span>/<span class="number">0xad0</span></div><div class="line"> [<span class="number">149459.897820</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf3a1f9f0&gt;]</span> schedule+<span class="number">0x70</span>/<span class="number">0x90</span></div><div class="line"> [<span class="number">149459.897835</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf3a23b00&gt;]</span> schedule_timeout+<span class="number">0x548</span>/<span class="number">0x668</span></div><div class="line"> [<span class="number">149459.897853</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2959028&gt;]</span> msleep+<span class="number">0x28</span>/<span class="number">0x38</span></div><div class="line"> [<span class="number">149459.897868</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a1ff38&gt;]</span> shrink_inactive_list+<span class="number">0x118</span>/<span class="number">0x998</span></div><div class="line"> [<span class="number">149459.897887</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a1cb10&gt;]</span> shrink_node_memcg+<span class="number">0xa18</span>/<span class="number">0x1100</span></div><div class="line"> [<span class="number">149459.897904</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a1f0b0&gt;]</span> shrink_node+<span class="number">0x108</span>/<span class="number">0x2f8</span></div><div class="line"> [<span class="number">149459.897922</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a1bcb0&gt;]</span> do_try_to_free_pages+<span class="number">0x178</span>/<span class="number">0x380</span></div><div class="line"> [<span class="number">149459.897940</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a1b9d0&gt;]</span> try_to_free_pages+<span class="number">0x370</span>/<span class="number">0x4d8</span></div><div class="line"> [<span class="number">149459.897957</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a071b8&gt;]</span> __alloc_pages_nodemask+<span class="number">0x868</span>/<span class="number">0x1380</span></div><div class="line"> [<span class="number">149459.897977</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a13784&gt;]</span> _do_page_cache_readahead+<span class="number">0xbc</span>/<span class="number">0x358</span></div><div class="line"> [<span class="number">149459.897996</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf29fde4c&gt;]</span> filemap_fault+<span class="number">0x11c</span>/<span class="number">0x600</span></div><div class="line"> [<span class="number">149459.898013</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2b479f8&gt;]</span> ext4_filemap_fault+<span class="number">0x30</span>/<span class="number">0x50</span></div><div class="line"> [<span class="number">149459.898031</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a47f38&gt;]</span> handle_pte_fault+<span class="number">0xb38</span>/<span class="number">0xfa8</span></div><div class="line"> [<span class="number">149459.898048</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2a485c8&gt;]</span> handle_mm_fault+<span class="number">0x1d0</span>/<span class="number">0x328</span></div><div class="line"> [<span class="number">149459.898065</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf28a3668&gt;]</span> do_page_fault+<span class="number">0x2a0</span>/<span class="number">0x3e0</span></div><div class="line"> [<span class="number">149459.898083</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf28a3364&gt;]</span> do_translation_fault+<span class="number">0x44</span>/<span class="number">0xa8</span></div><div class="line"> [<span class="number">149459.898100</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2880d18&gt;]</span> do_el0_ia_bp_hardening+<span class="number">0xc0</span>/<span class="number">0x158</span></div><div class="line"> [<span class="number">149459.898118</span>] [<span class="number">3</span>:<span class="number">2065</span>:watchdog] <span class="meta">[&lt;ffffff8bf2882c98&gt;]</span> el0_ia+<span class="number">0x1c</span>/<span class="number">0x20</span></div></pre></td></tr></table></figure>
+<p>现象：大量进程从缺页异常入口，调用内存回收接口： shrink_inactive_list -&gt; msleep ，使得该进程状态变为 D.</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div></pre></td><td class="code"><pre><div class="line"><span class="function"><span class="keyword">static</span> noinline_for_stack <span class="keyword">unsigned</span> <span class="keyword">long</span></span></div><div class="line"><span class="title">shrink_inactive_list</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">long</span> nr_to_scan, <span class="keyword">struct</span> lruvec *lruvec,</span></div><div class="line">		     <span class="keyword">struct</span> scan_control *sc, <span class="keyword">enum</span> lru_list lru)</div><div class="line">&#123;</div><div class="line">	LIST_HEAD(page_list);</div><div class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> nr_scanned;</div><div class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> nr_reclaimed = <span class="number">0</span>;</div><div class="line">	<span class="keyword">unsigned</span> <span class="keyword">long</span> nr_taken;</div><div class="line">	<span class="keyword">struct</span> reclaim_stat stat = &#123;&#125;;</div><div class="line">	<span class="keyword">isolate_mode_t</span> isolate_mode = <span class="number">0</span>;</div><div class="line">	<span class="keyword">int</span> file = is_file_lru(lru);</div><div class="line">	<span class="keyword">struct</span> pglist_data *pgdat = lruvec_pgdat(lruvec);</div><div class="line">	<span class="keyword">struct</span> zone_reclaim_stat *reclaim_stat = &amp;lruvec-&gt;reclaim_stat;</div><div class="line">	<span class="keyword">bool</span> stalled = <span class="literal">false</span>;</div><div class="line"></div><div class="line">	<span class="keyword">while</span> (unlikely(too_many_isolated(pgdat, file, sc, stalled))) &#123;</div><div class="line">		<span class="keyword">if</span> (stalled)</div><div class="line">			<span class="keyword">return</span> <span class="number">0</span>;</div><div class="line"></div><div class="line">		<span class="comment">/* wait a bit for the reclaimer. */</span></div><div class="line">		msleep(<span class="number">100</span>); <span class="comment">////////////////////// 卡在这里</span></div><div class="line">		stalled = <span class="literal">true</span>;</div><div class="line"></div><div class="line">		<span class="comment">/* We are about to die and free our memory. Return now. */</span></div><div class="line">		<span class="keyword">if</span> (fatal_signal_pending(current))</div><div class="line">			<span class="keyword">return</span> SWAP_CLUSTER_MAX;</div><div class="line">	&#125;</div></pre></td></tr></table></figure>
+<p>此函数已经有跳出功能，不会一直卡，最多 2 次就会退出去。<br>说明是大量的进程疯狂地调用 shrink_inactive_list 又被阻塞了一下子，又退出去，又掉进来。所以，不是一直卡死，而是性能瓶颈拥堵在这个地方，congestion.</p>
+<p>从上层 systrace 也能看到，很有规律的大概 110ms 一段的 D 状态。</p>
+<p><img src="//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/systrace_D.jpg" alt> </p>
+<p>说明隔离页面过多，sleep 100ms ，猜测目的是 1. 给时间处理隔离页面，回写文件页到磁盘 2. 是控制并发，也许另一个 cpu 也在同样的回收流程导致隔离页这在时刻变大。</p>
+<p>所以两个方向，疑点：</p>
+<p>一是内存紧缺，内存回收不及时，内存需求量大。LMK 没触发，内存有很多匿名页，都在回收和回写文件页等。<br>二是 io 速率慢，某个时间段速率变慢，ufs 频率低，上层读写大量数据，io 占用率过高等。</p>
+<p>需要澄清这些疑点。但是，从这两个方向作优化，都可以达到缓解，甚至可以平衡瓶颈。例如抬高 watermark.</p>
+<p>插播一些背景知识</p>
+<p><strong>page cache</strong></p>
+<p>导致这个情况的原因是：进程在申请内存的时候，发现该 zone 的 freelist 上已经没有足够的内存可用，所以不得不去从该 zone 的 LRU 链表里回收 inactive 的page，这种情况就是 direct reclaim（直接回收）。direct reclaim会比较消耗时间的原因是，它在回收的时候不会去区分dirty page和clean page，如果回收的是dirty page，就会触发磁盘 IO 的操作，它会首先把 dirty page 里面的内容给回写到磁盘作同步，再去把该 page 给放到 freelist 里。</p>
+<p>下图来看下memory，page cache，Disk I/O的关系。</p>
+<p><img src="//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/page_cache1.png" alt> </p>
+<p>举个简单的例子，比如我们 open 一个文件时，如果没有使用 O_DIRECT 这个flag，那就是 File I/O, 所有对磁盘文件的访问都要经过内存，内存会把这部分数据给缓存起来；但是如果使用了O_DIRECT这个flag，那就是Direct I/O, 它会绕过内存而去直接访问磁盘，访问的这部分数据也不会被缓存起来，自然性能上会降低很多。</p>
+<p><strong>page reclaim</strong></p>
+<p>在直观上，我们有一个认知，我们现在读了一个文件，它会被缓存到内存里面，如果接下来的一个月我们一直都不会再次访问它，而且我们这一个月都不会关闭或者重启机器，那么在这一个月之后该文件就不应该再在内存里头了。这就是内核对 page cache 的管理策略：LRU（最近最少使用）。即把最近最少使用的 page cache 给回收为 free pages。</p>
+<p>内核的页回收机制有两种：后台周期性回收和直接回收。</p>
+<p>后台回收是有一个内核线程 kswapd 来做，当内存里 free 的 pages 低于一个水位（page_low）时，就会唤醒该内核线程，然后它从 LRU 链表里回收 page cache 到内存的 free_list 里头，它会一直回收直至 free 的 pages 达到另外一个水位 page_high 才停止. 如下图所示，</p>
+<p><img src="//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/kswapd1.png" alt> </p>
+<p>直接回收则是，在发生 page fault/alloc memory 时，没有足够可用的内存，于是线程就自己直接去回收内存，它一次性的会回收 32 个 pages。逻辑过程如下图所示，</p>
+<p><img src="//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/kswapd2.png" alt> </p>
+<p>所以，抬高 watermark 可以间接减少内存回收的并发量，减轻卡在 shrink_inactive_list.</p>
+<p>然而，还是没彻底解决这个问题，所以我们把疑点再次指向 io。</p>
+<p>尝试增加更多的信息，来了解触发瓶颈的微观过程。</p>
+<ol>
+<li>跑 monkey 增加 io 使用率、io 读写速度监控，以时间片为 100ms，监控连续 D 状态，并向内核打印 D 进程堆栈信息、内存信息等。</li>
+<li>打开 ftarce 的 vmscan 和 writeback 两个监控点，apk 监控到 D 状态就进dump，从 dump 解析 ftrace，使用 kernelshark 来观察一些数据。</li>
+</ol>
+<figure class="highlight crystal"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div></pre></td><td class="code"><pre><div class="line">echo <span class="number">1</span> &gt; <span class="regexp">/sys/kernel</span><span class="regexp">/debug/tracing</span><span class="regexp">/events/writeback</span><span class="regexp">/enable</span></div><div class="line">echo 1 &gt; /sys<span class="regexp">/kernel/debug</span><span class="regexp">/tracing/events</span><span class="regexp">/vmscan/enable</span></div><div class="line">echo <span class="number">1</span> &gt; <span class="regexp">/sys/kernel</span><span class="regexp">/debug/tracing</span><span class="regexp">/tracing_on</span></div></pre></td></tr></table></figure>
+<p>从测试结果看到：</p>
+<ol>
+<li>apk 监控到的 io 使用率不高</li>
+<li>从 ftrace 看到回写量不大</li>
+</ol>
+<p>再补充一些代码和流程图：</p>
+<p><img src="//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/memory_reclaim.png" alt> </p>
+<p><img src="//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/shrink_inactive_list.png" alt> </p>
+<p>收缩不活跃链表</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div><div class="line">38</div><div class="line">39</div><div class="line">40</div><div class="line">41</div><div class="line">42</div><div class="line">43</div><div class="line">44</div><div class="line">45</div><div class="line">46</div><div class="line">47</div><div class="line">48</div><div class="line">49</div><div class="line">50</div><div class="line">51</div><div class="line">52</div><div class="line">53</div><div class="line">54</div><div class="line">55</div><div class="line">56</div><div class="line">57</div><div class="line">58</div><div class="line">59</div><div class="line">60</div><div class="line">61</div><div class="line">62</div><div class="line">63</div></pre></td><td class="code"><pre><div class="line"><span class="function"><span class="keyword">static</span> noinline_for_stack <span class="keyword">unsigned</span> <span class="keyword">long</span></span></div><div class="line"><span class="title">shrink_inactive_list</span><span class="params">(<span class="keyword">unsigned</span> <span class="keyword">long</span> nr_to_scan, <span class="keyword">struct</span> lruvec *lruvec,</span></div><div class="line">             <span class="keyword">struct</span> scan_control *sc, <span class="keyword">enum</span> lru_list lru)</div><div class="line">&#123;</div><div class="line">    LIST_HEAD(page_list);</div><div class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> nr_scanned;</div><div class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> nr_reclaimed = <span class="number">0</span>;</div><div class="line">    <span class="keyword">unsigned</span> <span class="keyword">long</span> nr_taken;</div><div class="line">    <span class="keyword">struct</span> reclaim_stat stat = &#123;&#125;;</div><div class="line">    <span class="keyword">isolate_mode_t</span> isolate_mode = <span class="number">0</span>;</div><div class="line">    <span class="keyword">int</span> file = is_file_lru(lru);</div><div class="line">    <span class="keyword">struct</span> pglist_data *pgdat = lruvec_pgdat(lruvec);</div><div class="line">    <span class="keyword">struct</span> zone_reclaim_stat *reclaim_stat = &amp;lruvec-&gt;reclaim_stat;</div><div class="line"> </div><div class="line">    <span class="keyword">while</span> (unlikely(too_many_isolated(pgdat, file, sc))) &#123;</div><div class="line">        congestion_wait(BLK_RW_ASYNC, HZ/<span class="number">10</span>);<span class="comment">//如果隔离的页太多就进入睡眠</span></div><div class="line"> </div><div class="line">        <span class="keyword">if</span> (fatal_signal_pending(current))</div><div class="line">            <span class="keyword">return</span> SWAP_CLUSTER_MAX;</div><div class="line">    &#125;</div><div class="line"><span class="comment">//将lru缓存中的页释放到各个lru链表中去</span></div><div class="line">    lru_add_drain();</div><div class="line"> </div><div class="line">    <span class="keyword">if</span> (!sc-&gt;may_unmap)</div><div class="line">        isolate_mode |= ISOLATE_UNMAPPED;</div><div class="line"> </div><div class="line">    spin_lock_irq(&amp;pgdat-&gt;lru_lock);</div><div class="line"><span class="comment">//隔离部分lru中的页，保存到链表page_list中</span></div><div class="line">    nr_taken = isolate_lru_pages(nr_to_scan, lruvec, &amp;page_list,</div><div class="line">                     &amp;nr_scanned, sc, isolate_mode, lru);</div><div class="line"> </div><div class="line"><span class="comment">//下面部分代码做相关统计信息更新</span></div><div class="line">    <span class="number">__</span>mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, nr_taken);</div><div class="line">    reclaim_stat-&gt;recent_scanned[file] += nr_taken;</div><div class="line"> </div><div class="line">    <span class="keyword">if</span> (global_reclaim(sc)) &#123;</div><div class="line">        <span class="keyword">if</span> (current_is_kswapd())</div><div class="line">            <span class="number">__</span>count_vm_events(PGSCAN_KSWAPD, nr_scanned);</div><div class="line">        <span class="keyword">else</span></div><div class="line">            <span class="number">__</span>count_vm_events(PGSCAN_DIRECT, nr_scanned);</div><div class="line">    &#125;</div><div class="line">    spin_unlock_irq(&amp;pgdat-&gt;lru_lock);</div><div class="line"> </div><div class="line">    <span class="keyword">if</span> (nr_taken == <span class="number">0</span>)</div><div class="line">        <span class="keyword">return</span> <span class="number">0</span>;</div><div class="line"><span class="comment">//执行页面回收，待回收的页放在page_list中，回收完成之后没有被回收的页也被放在page_list中返回</span></div><div class="line">    nr_reclaimed = shrink_page_list(&amp;page_list, pgdat, sc, <span class="number">0</span>,</div><div class="line">                &amp;stat, <span class="literal">false</span>);</div><div class="line">   spin_lock_irq(&amp;pgdat-&gt;lru_lock);</div><div class="line"> </div><div class="line">    <span class="keyword">if</span> (global_reclaim(sc)) &#123;</div><div class="line">        <span class="keyword">if</span> (current_is_kswapd())</div><div class="line">            <span class="number">__</span>count_vm_events(PGSTEAL_KSWAPD, nr_reclaimed);</div><div class="line">        <span class="keyword">else</span></div><div class="line">            <span class="number">__</span>count_vm_events(PGSTEAL_DIRECT, nr_reclaimed);</div><div class="line">    &#125;</div><div class="line"><span class="comment">//将没有回收的页放回原有链表中，如果页的引用计数为0 就放到page_list中返回</span></div><div class="line">    putback_inactive_pages(lruvec, &amp;page_list);</div><div class="line"><span class="comment">//释放掉引用计数变为0的页</span></div><div class="line">    free_hot_cold_page_list(&amp;page_list, <span class="literal">true</span>);</div><div class="line">	……</div><div class="line">    <span class="keyword">return</span> nr_reclaimed;</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<p>页面回收</p>
+<p><img src="//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/shrink_page_list.png" alt> </p>
+<figure class="highlight xl"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div><div class="line">38</div><div class="line">39</div><div class="line">40</div><div class="line">41</div><div class="line">42</div><div class="line">43</div><div class="line">44</div><div class="line">45</div><div class="line">46</div><div class="line">47</div><div class="line">48</div><div class="line">49</div><div class="line">50</div><div class="line">51</div><div class="line">52</div><div class="line">53</div><div class="line">54</div><div class="line">55</div><div class="line">56</div><div class="line">57</div><div class="line">58</div><div class="line">59</div><div class="line">60</div><div class="line">61</div><div class="line">62</div><div class="line">63</div><div class="line">64</div><div class="line">65</div><div class="line">66</div><div class="line">67</div><div class="line">68</div><div class="line">69</div><div class="line">70</div><div class="line">71</div><div class="line">72</div><div class="line">73</div><div class="line">74</div><div class="line">75</div><div class="line">76</div><div class="line">77</div><div class="line">78</div><div class="line">79</div><div class="line">80</div><div class="line">81</div><div class="line">82</div><div class="line">83</div><div class="line">84</div><div class="line">85</div><div class="line">86</div><div class="line">87</div><div class="line">88</div><div class="line">89</div><div class="line">90</div><div class="line">91</div><div class="line">92</div><div class="line">93</div><div class="line">94</div><div class="line">95</div><div class="line">96</div><div class="line">97</div><div class="line">98</div><div class="line">99</div><div class="line">100</div><div class="line">101</div><div class="line">102</div><div class="line">103</div><div class="line">104</div><div class="line">105</div><div class="line">106</div><div class="line">107</div><div class="line">108</div><div class="line">109</div><div class="line">110</div><div class="line">111</div><div class="line">112</div><div class="line">113</div><div class="line">114</div><div class="line">115</div><div class="line">116</div><div class="line">117</div><div class="line">118</div><div class="line">119</div><div class="line">120</div><div class="line">121</div><div class="line">122</div><div class="line">123</div><div class="line">124</div><div class="line">125</div><div class="line">126</div><div class="line">127</div><div class="line">128</div><div class="line">129</div><div class="line">130</div><div class="line">131</div><div class="line">132</div><div class="line">133</div><div class="line">134</div><div class="line">135</div><div class="line">136</div><div class="line">137</div><div class="line">138</div><div class="line">139</div><div class="line">140</div><div class="line">141</div><div class="line">142</div><div class="line">143</div><div class="line">144</div><div class="line">145</div><div class="line">146</div><div class="line">147</div><div class="line">148</div><div class="line">149</div><div class="line">150</div><div class="line">151</div><div class="line">152</div><div class="line">153</div><div class="line">154</div><div class="line">155</div><div class="line">156</div><div class="line">157</div><div class="line">158</div><div class="line">159</div><div class="line">160</div><div class="line">161</div><div class="line">162</div><div class="line">163</div><div class="line">164</div><div class="line">165</div><div class="line">166</div><div class="line">167</div><div class="line">168</div><div class="line">169</div><div class="line">170</div><div class="line">171</div><div class="line">172</div><div class="line">173</div><div class="line">174</div><div class="line">175</div><div class="line">176</div><div class="line">177</div><div class="line">178</div><div class="line">179</div><div class="line">180</div><div class="line">181</div><div class="line">182</div><div class="line">183</div><div class="line">184</div><div class="line">185</div><div class="line">186</div><div class="line">187</div><div class="line">188</div><div class="line">189</div><div class="line">190</div><div class="line">191</div><div class="line">192</div><div class="line">193</div><div class="line">194</div><div class="line">195</div><div class="line">196</div><div class="line">197</div><div class="line">198</div><div class="line">199</div><div class="line">200</div><div class="line">201</div><div class="line">202</div><div class="line">203</div><div class="line">204</div><div class="line">205</div><div class="line">206</div><div class="line">207</div><div class="line">208</div><div class="line">209</div><div class="line">210</div><div class="line">211</div><div class="line">212</div><div class="line">213</div><div class="line">214</div><div class="line">215</div><div class="line">216</div><div class="line">217</div><div class="line">218</div><div class="line">219</div><div class="line">220</div><div class="line">221</div><div class="line">222</div><div class="line">223</div><div class="line">224</div><div class="line">225</div></pre></td><td class="code"><pre><div class="line">static unsigned long shrink_page_list(struct list_head *page_list,</div><div class="line">                      struct pglist_data *pgdat,</div><div class="line">                      struct scan_control *sc,</div><div class="line">                      enum ttu_flags ttu_flags,</div><div class="line">                      struct reclaim_stat *stat,</div><div class="line">                      bool force_reclaim)</div><div class="line">&#123;</div><div class="line">    LIST_HEAD(ret_pages);</div><div class="line">    LIST_HEAD(free_pages);</div><div class="line">    int pgactivate = <span class="number">0</span>;</div><div class="line">    unsigned nr_unqueued_dirty = <span class="number">0</span>;</div><div class="line">    unsigned nr_dirty = <span class="number">0</span>;</div><div class="line">    unsigned nr_congested = <span class="number">0</span>;</div><div class="line">    unsigned nr_reclaimed = <span class="number">0</span>;</div><div class="line">    unsigned nr_writeback = <span class="number">0</span>;</div><div class="line">    unsigned nr_immediate = <span class="number">0</span>;</div><div class="line">    unsigned nr_ref_keep = <span class="number">0</span>;</div><div class="line">    unsigned nr_unmap_fail = <span class="number">0</span>;</div><div class="line"> </div><div class="line">    cond_resched();</div><div class="line"> </div><div class="line">    <span class="keyword">while</span> (!list_empty(page_list)) &#123;<span class="comment">//遍历链表page_list直到为空</span></div><div class="line">        struct address_space *mapping;</div><div class="line">        struct <span class="built_in">page</span> *<span class="built_in">page</span>;</div><div class="line">        int may_enter_fs;</div><div class="line">        enum page_references references = PAGEREF_RECLAIM_CLEAN;</div><div class="line">        bool dirty, writeback;</div><div class="line"> </div><div class="line">        cond_resched();</div><div class="line"> </div><div class="line">        <span class="built_in">page</span> = lru_to_page(page_list);</div><div class="line">        <span class="function"><span class="title">list_del</span>(&amp;<span class="built_in">page</span>-&gt;</span>lru);</div><div class="line">	<span class="comment">//如果页被锁住就跳过该页</span></div><div class="line">        <span class="keyword">if</span> (!trylock_page(<span class="built_in">page</span>))</div><div class="line">            goto keep;</div><div class="line"> </div><div class="line">        <span class="function"><span class="title">sc</span>-&gt;</span>nr_scanned++;<span class="comment">//增加扫描计数</span></div><div class="line">        <span class="keyword">if</span> (unlikely(!page_evictable(<span class="built_in">page</span>)))<span class="comment">//如果是un evictable页就尝试设置activate并放到ret_pages中</span></div><div class="line">            goto activate_locked;</div><div class="line"><span class="comment">//如果页是映射到进程的，但是不允许回收映射了的页就将页解锁后放到ret_pages中</span></div><div class="line">        <span class="function"><span class="title">if</span> (!sc-&gt;</span>may_unmap &amp;&amp; page_mapped(<span class="built_in">page</span>))</div><div class="line">            goto keep_locked;</div><div class="line"><span class="comment">/*如果是映射页或者交换缓存中的页就double扫描计数，这说明可扫描的页不多应当尽快结束页扫描，否者会影响系统性能*/</span></div><div class="line">        <span class="keyword">if</span> ((page_mapped(<span class="built_in">page</span>) || PageSwapCache(<span class="built_in">page</span>)) &amp;&amp;</div><div class="line">            !(PageAnon(<span class="built_in">page</span>) &amp;&amp; !PageSwapBacked(<span class="built_in">page</span>)))</div><div class="line">            <span class="function"><span class="title">sc</span>-&gt;</span>nr_scanned++;</div><div class="line"><span class="comment">//标记是否允许文件系统操作</span></div><div class="line">        <span class="function"><span class="title">may_enter_fs</span> = (sc-&gt;</span>gfp_mask &amp; __GFP_FS) ||</div><div class="line">            (P<span class="function"><span class="title">ageSwapCache</span>(<span class="built_in">page</span>) &amp;&amp; (sc-&gt;</span>gfp_mask &amp; __GFP_IO));</div><div class="line"><span class="comment">//判断页是否为赃或者处于回写中</span></div><div class="line">        page_check_dirty_writeback(<span class="built_in">page</span>, &amp;dirty, &amp;writeback);</div><div class="line">        <span class="keyword">if</span> (dirty || writeback)</div><div class="line">            nr_dirty++;</div><div class="line"><span class="comment">//赃但是没有回写，说明页没有被加入块设备请求队列</span></div><div class="line">        <span class="keyword">if</span> (dirty &amp;&amp; !writeback)</div><div class="line">            nr_unqueued_dirty++;</div><div class="line"><span class="comment">//如果是文件映射返回页的mapping ，如果是匿名映射返回NULL，如果在交换缓存中返回swapper_spaces</span></div><div class="line">        mapping = page_mapping(<span class="built_in">page</span>);</div><div class="line"><span class="comment">/*两种情况会增加阻塞页框计数：1）赃页或者正在回写的页，而且当前页所在inode的阻塞标志置位；2）页处于回写中而且标记页正在被回收*/</span></div><div class="line">        <span class="keyword">if</span> (((dirty || writeback) &amp;&amp; mapping &amp;&amp;</div><div class="line">             <span class="function"><span class="title">inode_write_congested</span>(mapping-&gt;</span>host)) ||</div><div class="line">            (writeback &amp;&amp; PageReclaim(<span class="built_in">page</span>)))</div><div class="line">            nr_congested++;</div><div class="line"> </div><div class="line">        <span class="keyword">if</span> (PageWriteback(<span class="built_in">page</span>)) &#123;<span class="comment">//页处于回写中，下面处理都是基于这一前提</span></div><div class="line"><span class="comment">//设置标志PGDAT_WRITEBACK标识有大量的页处于回写中</span></div><div class="line">            <span class="keyword">if</span> (current_is_kswapd() &amp;&amp;<span class="comment">//当前线程是交换线程</span></div><div class="line">                PageReclaim(<span class="built_in">page</span>) &amp;&amp;<span class="comment">//页处于回收过程中</span></div><div class="line">                <span class="function"><span class="title">test_bit</span>(PGDAT_WRITEBACK, &amp;pgdat-&gt;</span>flags)) &#123;</div><div class="line">                nr_immediate++;<span class="comment">//增加nr_immediate统计，表示页即将被回收</span></div><div class="line">                goto activate_locked;<span class="comment">//将页放到ret_pages中返回</span></div><div class="line"> </div><div class="line">            &#125; <span class="keyword">else</span> <span class="keyword">if</span> (sane_reclaim(sc) ||<span class="comment">//如果回收的是整个内存域就返回true</span></div><div class="line">                !PageReclaim(<span class="built_in">page</span>) || !may_enter_fs) &#123;</div><div class="line">                SetPageReclaim(<span class="built_in">page</span>);</div><div class="line">                nr_writeback++;<span class="comment">//增加回写页计数</span></div><div class="line">                goto activate_locked;</div><div class="line"> </div><div class="line">            &#125; <span class="keyword">else</span> &#123;</div><div class="line">                unlock_page(<span class="built_in">page</span>);</div><div class="line">                wait_on_page_writeback(<span class="built_in">page</span>);<span class="comment">//等页回写完成</span></div><div class="line">                <span class="function"><span class="title">list_add_tail</span>(&amp;<span class="built_in">page</span>-&gt;</span>lru, page_list); <span class="comment">//将页放到page_list中下次考虑</span></div><div class="line">                continue;</div><div class="line">            &#125;</div><div class="line">        &#125;</div><div class="line"><span class="comment">//如果没有设置强制回收就检查页的访问情况</span></div><div class="line">        <span class="keyword">if</span> (!force_reclaim)</div><div class="line">            references = page_check_references(<span class="built_in">page</span>, sc);</div><div class="line">        switch (references) &#123;</div><div class="line">        case PAGEREF_ACTIVATE:</div><div class="line">            goto activate_locked;<span class="comment">//如果页近期两次被访问过就尝试设置activate并放到ret_pages中</span></div><div class="line">        case PAGEREF_KEEP:</div><div class="line">            nr_ref_keep++;<span class="comment">//如果页近期被访问过一次就将其放到ret_pages中</span></div><div class="line">            goto keep_locked;</div><div class="line">        case PAGEREF_RECLAIM:</div><div class="line">        case PAGEREF_RECLAIM_CLEAN:</div><div class="line">            ; <span class="comment">/* try to reclaim the page below */</span>/下面尝试回收这个页</div><div class="line">        &#125;</div><div class="line"><span class="comment">//如果是匿名页而且不在交换缓存中就将其添加到交换缓存</span></div><div class="line">        <span class="keyword">if</span> (PageAnon(<span class="built_in">page</span>) &amp;&amp; PageSwapBacked(<span class="built_in">page</span>) &amp;&amp;</div><div class="line">            !PageSwapCache(<span class="built_in">page</span>)) &#123;</div><div class="line">            <span class="function"><span class="title">if</span> (!(sc-&gt;</span>gfp_mask &amp; __GFP_IO))</div><div class="line">                goto keep_locked;</div><div class="line">            <span class="keyword">if</span> (!add_to_swap(<span class="built_in">page</span>, page_list))</div><div class="line">                goto activate_locked;</div><div class="line">            may_enter_fs = <span class="number">1</span>; <span class="comment">//允许文件系统操作</span></div><div class="line"> </div><div class="line">            mapping = page_mapping(<span class="built_in">page</span>);<span class="comment">//返回swapper_spaces</span></div><div class="line">        &#125; <span class="keyword">else</span> <span class="keyword">if</span> (unlikely(PageTransHuge(<span class="built_in">page</span>))) &#123;</div><div class="line">            <span class="keyword">if</span> (split_huge_page_to_list(<span class="built_in">page</span>, page_list))</div><div class="line">                goto keep_locked;</div><div class="line">        &#125;</div><div class="line"> </div><div class="line">        <span class="keyword">if</span> (page_mapped(<span class="built_in">page</span>)) &#123;<span class="comment">//如果页有被映射到进程就尝试解除映射</span></div><div class="line">            <span class="keyword">if</span> (!try_to_unmap(<span class="built_in">page</span>, ttu_flags | TTU_BATCH_FLUSH)) &#123;</div><div class="line">                nr_unmap_fail++;</div><div class="line">                goto activate_locked;</div><div class="line">            &#125;</div><div class="line">        &#125;</div><div class="line"> </div><div class="line">        <span class="keyword">if</span> (PageDirty(<span class="built_in">page</span>)) &#123;</div><div class="line"><span class="comment">/*不写出的情况：1）非kswapd进程，只有kswapd 才能文件系统操作，否者可能递归导致栈溢出；2）不是正在回收的页；3）不是正在做大量赃页回写*/</span></div><div class="line">            <span class="keyword">if</span> (page_is_file_cache(<span class="built_in">page</span>) &amp;&amp;</div><div class="line">                (!current_is_kswapd() || !PageReclaim(<span class="built_in">page</span>) ||</div><div class="line">                 !<span class="function"><span class="title">test_bit</span>(PGDAT_DIRTY, &amp;pgdat-&gt;</span>flags))) &#123;</div><div class="line">                inc_node_page_state(<span class="built_in">page</span>, NR_VMSCAN_IMMEDIATE);</div><div class="line">                SetPageReclaim(<span class="built_in">page</span>);</div><div class="line"><span class="comment">//将页置为activate并添加到ret_pages中</span></div><div class="line">                goto activate_locked;</div><div class="line">            &#125;</div><div class="line">            <span class="keyword">if</span> (references == PAGEREF_RECLAIM_CLEAN)</div><div class="line">                goto keep_locked;<span class="comment">//近期有被访问过而且变赃就ret_pages中</span></div><div class="line">            <span class="keyword">if</span> (!may_enter_fs)<span class="comment">//不允许文件系统相关操作</span></div><div class="line">                goto keep_locked;</div><div class="line">            <span class="function"><span class="title">if</span> (!sc-&gt;</span>may_writepage)<span class="comment">//不允许回写</span></div><div class="line">                goto keep_locked;</div><div class="line"> </div><div class="line">            try_to_unmap_flush_dirty();</div><div class="line">            switch (pageout(<span class="built_in">page</span>, mapping, sc)) &#123;<span class="comment">//将页写出</span></div><div class="line">            case PAGE_KEEP:</div><div class="line">                goto keep_locked; </div><div class="line">            case PAGE_ACTIVATE:</div><div class="line">                goto activate_locked;</div><div class="line">            case PAGE_SUCCESS: </div><div class="line">                <span class="keyword">if</span> (PageWriteback(<span class="built_in">page</span>))</div><div class="line">                    goto keep;</div><div class="line">                <span class="keyword">if</span> (PageDirty(<span class="built_in">page</span>)) <span class="comment">//如果页被再次弄脏</span></div><div class="line">                    goto keep;</div><div class="line"> </div><div class="line">                <span class="keyword">if</span> (!trylock_page(<span class="built_in">page</span>))<span class="comment">//页被锁住</span></div><div class="line">                    goto keep;</div><div class="line">                <span class="keyword">if</span> (PageDirty(<span class="built_in">page</span>) || PageWriteback(<span class="built_in">page</span>))<span class="comment">//页被弄脏或者在回写中</span></div><div class="line">                    goto keep_locked;</div><div class="line">                mapping = page_mapping(<span class="built_in">page</span>);</div><div class="line">            case PAGE_CLEAN: </div><div class="line">                ; <span class="comment">/* try to free the page below */</span></div><div class="line">            &#125;</div><div class="line">        &#125;</div><div class="line"> </div><div class="line">        <span class="keyword">if</span> (page_has_private(<span class="built_in">page</span>)) &#123; </div><div class="line">            <span class="function"><span class="title">if</span> (!try_to_release_page(<span class="built_in">page</span>, sc-&gt;</span>gfp_mask)) <span class="comment">//释放掉页的buffer</span></div><div class="line">                goto activate_locked;</div><div class="line">            <span class="keyword">if</span> (!mapping &amp;&amp; page_count(<span class="built_in">page</span>) == <span class="number">1</span>) &#123;</div><div class="line">                unlock_page(<span class="built_in">page</span>);</div><div class="line">                <span class="keyword">if</span> (put_page_testzero(<span class="built_in">page</span>))</div><div class="line">                    goto free_it;</div><div class="line">                <span class="keyword">else</span> &#123;</div><div class="line">                    nr_reclaimed++;</div><div class="line">                    continue;</div><div class="line">                &#125;</div><div class="line">            &#125;</div><div class="line">        &#125;</div><div class="line"> </div><div class="line">        <span class="keyword">if</span> (PageAnon(<span class="built_in">page</span>) &amp;&amp; !PageSwapBacked(<span class="built_in">page</span>)) &#123;</div><div class="line">            <span class="keyword">if</span> (!page_ref_freeze(<span class="built_in">page</span>, <span class="number">1</span>))</div><div class="line">                goto keep_locked;</div><div class="line">            <span class="keyword">if</span> (PageDirty(<span class="built_in">page</span>)) &#123;</div><div class="line">                page_ref_unfreeze(<span class="built_in">page</span>, <span class="number">1</span>);</div><div class="line">                goto keep_locked;</div><div class="line">            &#125;</div><div class="line"> </div><div class="line">            count_vm_event(PGLAZYFREED);</div><div class="line">        &#125; <span class="keyword">else</span> <span class="keyword">if</span> (!mapping || !__remove_mapping(mapping, <span class="built_in">page</span>, <span class="literal">true</span>))<span class="comment">//从页缓存中删除</span></div><div class="line">            goto keep_locked;</div><div class="line">        __ClearPageLocked(<span class="built_in">page</span>);</div><div class="line">free_it:</div><div class="line">        nr_reclaimed++;</div><div class="line"> </div><div class="line">        <span class="function"><span class="title">list_add</span>(&amp;<span class="built_in">page</span>-&gt;</span>lru, &amp;free_pages); <span class="comment">//将页挂到free_pages中等待释放</span></div><div class="line">        continue;</div><div class="line"> </div><div class="line">activate_locked:</div><div class="line">        <span class="keyword">if</span> (PageSwapCache(<span class="built_in">page</span>) &amp;&amp; (mem_cgroup_swap_full(<span class="built_in">page</span>) ||</div><div class="line">                        PageMlocked(<span class="built_in">page</span>)))</div><div class="line">            try_to_free_swap(<span class="built_in">page</span>);</div><div class="line">        <span class="keyword">if</span> (!PageMlocked(<span class="built_in">page</span>)) &#123;</div><div class="line">            SetPageActive(<span class="built_in">page</span>);</div><div class="line">            pgactivate++;</div><div class="line">        &#125;</div><div class="line">keep_locked:</div><div class="line">        unlock_page(<span class="built_in">page</span>);</div><div class="line">keep:</div><div class="line">        <span class="function"><span class="title">list_add</span>(&amp;<span class="built_in">page</span>-&gt;</span>lru, &amp;ret_pages);</div><div class="line">        VM_BUG_ON_PAGE(PageLRU(<span class="built_in">page</span>) || PageUnevictable(<span class="built_in">page</span>), <span class="built_in">page</span>);</div><div class="line">    &#125;</div><div class="line"> </div><div class="line">    mem_cgroup_uncharge_list(&amp;free_pages);</div><div class="line">    try_to_unmap_flush(); <span class="comment">//输出tlb</span></div><div class="line">    free_hot_cold_page_list(&amp;free_pages, <span class="literal">true</span>); <span class="comment">//释放空闲页，没有释放成功的会通过free_pages返回</span></div><div class="line"> </div><div class="line">    list_splice(&amp;ret_pages, page_list);<span class="comment">//等待进一步处理的页</span></div><div class="line">    count_vm_events(PGACTIVATE, pgactivate);</div><div class="line"> </div><div class="line">    <span class="keyword">if</span> (stat) &#123;<span class="comment">//设置统计量</span></div><div class="line">        <span class="function"><span class="title">stat</span>-&gt;</span>nr_dirty = nr_dirty;</div><div class="line">        <span class="function"><span class="title">stat</span>-&gt;</span>nr_congested = nr_congested;</div><div class="line">        <span class="function"><span class="title">stat</span>-&gt;</span>nr_unqueued_dirty = nr_unqueued_dirty;</div><div class="line">        <span class="function"><span class="title">stat</span>-&gt;</span>nr_writeback = nr_writeback;</div><div class="line">        <span class="function"><span class="title">stat</span>-&gt;</span>nr_immediate = nr_immediate;</div><div class="line">        <span class="function"><span class="title">stat</span>-&gt;</span>nr_activate = pgactivate;</div><div class="line">        <span class="function"><span class="title">stat</span>-&gt;</span>nr_ref_keep = nr_ref_keep;</div><div class="line">        <span class="function"><span class="title">stat</span>-&gt;</span>nr_unmap_fail = nr_unmap_fail;</div><div class="line">    &#125;</div><div class="line">    return nr_reclaimed;</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<p>执行页面回收中页面状态</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">struct</span> reclaim_stat &#123;</div><div class="line">    <span class="keyword">unsigned</span> nr_dirty;<span class="comment">// page_list中脏页数</span></div><div class="line">    <span class="keyword">unsigned</span> nr_unqueued_dirty;<span class="comment">// page_list中脏页但是没有放入块设备请求队列中的页数</span></div><div class="line">    <span class="keyword">unsigned</span> nr_congested;<span class="comment">// page_list中阻塞的页数</span></div><div class="line">    <span class="keyword">unsigned</span> nr_writeback; <span class="comment">// page_list中处于回写中但是不是被回收的页数</span></div><div class="line">    <span class="keyword">unsigned</span> nr_immediate; <span class="comment">//page_list中即回写中而且即将被回收的页数</span></div><div class="line">    <span class="keyword">unsigned</span> nr_activate;<span class="comment">// page_list中近期被访问过需要添加到activate list的页数</span></div><div class="line">    <span class="keyword">unsigned</span> nr_ref_keep;<span class="comment">// page_list中近期被访问过的页数</span></div><div class="line">    <span class="keyword">unsigned</span> nr_unmap_fail;<span class="comment">//解除映射失败的页数</span></div><div class="line">&#125;;</div></pre></td></tr></table></figure>
+<p><img src="//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/mm_vmscan_lru_shrink_inactive.png" alt> </p>
+<p>图中显示 nr_dirty，nr_congested，nr_writeback 几乎都是 0，只有零星 nr_activate 被再访问的页面添加回 active list.<br>说明现场不存在 dirty 页面很多，回写 io 遇到瓶颈的情况。这个猜想不成立。</p>
+<p><img src="//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/mm_vmscan_writepage.png" alt> </p>
+<p>图中显示在 34 秒内，所有在 pageout() 中的页面，全是 anon 页面，没有 file ?</p>
+<p>查看 writeback trace event.</p>
+<p><img src="//lotte-bai.github.io/2019/10/23//D_state_processes_stuck_in_shrink_inactive_list.html/global_dirty_state.png" alt> </p>
+<p>没有很多 writeback 量</p>
+<p>通过最新的数据信息，回到之前的两个大方向：</p>
+<p><del>一是内存紧缺，内存回收不及时，内存需求量大。LMK 没触发，内存有很多匿名页，都在回收和回写文件页等。</del>（抬高水位、加速 LMK 触发，还有出现）<br><del>二是 io 速率慢，某个时间段速率变慢，ufs 频率低，上层读写大量数据，io 占用率过高等。</del> （数据证明，io 量不多，没有瓶颈）</p>
+<p>所以，方向变为：isolated file 统计偏大，导致一直判断 too_many_isolated 为真，卡在 shrink_inactive_list.</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div><div class="line">22</div><div class="line">23</div><div class="line">24</div><div class="line">25</div><div class="line">26</div><div class="line">27</div><div class="line">28</div><div class="line">29</div><div class="line">30</div><div class="line">31</div><div class="line">32</div><div class="line">33</div><div class="line">34</div><div class="line">35</div><div class="line">36</div><div class="line">37</div></pre></td><td class="code"><pre><div class="line"><span class="keyword">static</span> <span class="keyword">int</span> __too_many_isolated(<span class="class"><span class="keyword">struct</span> <span class="title">pglist_data</span></span> *pgdat, <span class="keyword">int</span> file,</div><div class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">scan_control</span></span> *sc, <span class="keyword">bool</span> stalled)</div><div class="line">&#123;</div><div class="line">	unsigned long inactive, isolated;</div><div class="line"></div><div class="line">	<span class="keyword">if</span> (file) &#123;</div><div class="line">		<span class="keyword">if</span> (stalled) &#123;</div><div class="line">			inactive = node_page_state_snapshot(pgdat,</div><div class="line">					NR_INACTIVE_FILE);</div><div class="line">			isolated = node_page_state_snapshot(pgdat,</div><div class="line">					NR_ISOLATED_FILE);</div><div class="line">		&#125; <span class="keyword">else</span> &#123;</div><div class="line">			inactive = node_page_state(pgdat, NR_INACTIVE_FILE);</div><div class="line">			isolated = node_page_state(pgdat, NR_ISOLATED_FILE);</div><div class="line">		&#125;</div><div class="line">	&#125; <span class="keyword">else</span> &#123;</div><div class="line">		<span class="keyword">if</span> (stalled) &#123;</div><div class="line">			inactive = node_page_state_snapshot(pgdat,</div><div class="line">					NR_INACTIVE_ANON);</div><div class="line">			isolated = node_page_state_snapshot(pgdat,</div><div class="line">					NR_ISOLATED_ANON);</div><div class="line">		&#125; <span class="keyword">else</span> &#123;</div><div class="line">			inactive = node_page_state(pgdat, NR_INACTIVE_ANON);</div><div class="line">			isolated = node_page_state(pgdat, NR_ISOLATED_ANON);</div><div class="line">		&#125;</div><div class="line">	&#125;</div><div class="line"></div><div class="line">	<span class="comment">/*</span></div><div class="line">	 * GFP_NOIO/GFP_NOFS callers are allowed to isolate more pages, so they</div><div class="line">	 * won't get blocked by normal direct-reclaimers, forming a circular</div><div class="line">	 * deadlock.</div><div class="line">	 */</div><div class="line">	<span class="keyword">if</span> ((sc-&gt;gfp_mask &amp; (__GFP_IO | __GFP_FS)) == (__GFP_IO | __GFP_FS))</div><div class="line">		inactive &gt;&gt;= <span class="number">3</span>;</div><div class="line"></div><div class="line">	<span class="keyword">return</span> isolated &gt; inactive;</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<p>其实，在这个时候，一个原来 7 月 30 号合入了 base 的 patch ，合入 mp 后，问题没有了。<br>但因为测试版本一直在 mp，并且一直有其他问题干扰，导致没有发现这个重要线索。</p>
+<p><a href="https://source.codeaurora.org/quic/la/kernel/msm-4.14/commit/fs/proc/task_mmu.c?h=msm-4.14&amp;id=c800548eac0350391c6d379a89f2e5d4c31366bf" target="_blank" rel="external">https://source.codeaurora.org/quic/la/kernel/msm-4.14/commit/fs/proc/task_mmu.c?h=msm-4.14&amp;id=c800548eac0350391c6d379a89f2e5d4c31366bf</a></p>
+<p>这个 patch 正是修复了 isolated count mismatch 的问题，导致一直让 isolated file 增大。</p>
+<p>对 NR_ISOLATED_FILE/NR_ISOLATED_ANON 的统计增减主要分布在 vmscan.c migrate.c，和 PPR 模块。理论上内核 vmscan.c migrate.c 都不会有问题，高通 PPR 模块插入在 vmscan. c 和 task_mmu.c 里，而我们 IMS 没有直接使用高通 PPR，嫌疑最大。那么，假如没有高通上游修复这个问题，我们自己能不能修复？ 很难，页面状态统计太分散，太微观，太难追踪。</p>
+<figure class="highlight applescript"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div></pre></td><td class="code"><pre><div class="line">MADV_FREE clears pte dirty bit <span class="keyword">and</span> <span class="keyword">then</span> marks <span class="keyword">the</span> page lazyfree (clear</div><div class="line">SwapBacked). PPR increments ISOLATE_FILES <span class="built_in">count</span>, <span class="keyword">then</span> isolates page <span class="keyword">and</span></div><div class="line">invokes a reclaim. Inbetween <span class="keyword">if</span> this lazyfreed page <span class="keyword">is</span> touched <span class="keyword">by</span> user <span class="keyword">then</span></div><div class="line"><span class="keyword">it</span> becomes dirty.  PPR <span class="keyword">in</span> shrink_page_list <span class="keyword">in</span> try_to_unmap finds <span class="keyword">the</span> page</div><div class="line">dirty, marks <span class="keyword">it</span> <span class="keyword">back</span> <span class="keyword">as</span> PageSwapBacked <span class="keyword">and</span> skips reclaim. As PageSwapBacked</div><div class="line"><span class="keyword">set</span>, PPR identifies <span class="keyword">the</span> page <span class="keyword">as</span> anon <span class="keyword">and</span> decrements ISOLATED_ANON, thus</div><div class="line">creating isolated <span class="built_in">count</span> mismatch.</div><div class="line"></div><div class="line">This results <span class="keyword">in</span> too_many_isolated() check causing <span class="built_in">delay</span> <span class="keyword">in</span> reclaim. Skip</div><div class="line">reclaiming lazyfreed pages <span class="keyword">in</span> PPR path.</div></pre></td></tr></table></figure>
+<figure class="highlight livecodeserver"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div><div class="line">13</div><div class="line">14</div><div class="line">15</div><div class="line">16</div><div class="line">17</div><div class="line">18</div><div class="line">19</div><div class="line">20</div><div class="line">21</div></pre></td><td class="code"><pre><div class="line">MADV_FREE (since Linux <span class="number">4.5</span>)</div><div class="line">              The application no longer requires <span class="keyword">the</span> pages <span class="keyword">in</span> <span class="keyword">the</span> range</div><div class="line">              specified <span class="keyword">by</span> addr <span class="keyword">and</span> <span class="built_in">len</span>.  The kernel can thus free these</div><div class="line">              pages, but <span class="keyword">the</span> freeing could be delayed <span class="keyword">until</span> memory pressure</div><div class="line">              occurs.  For <span class="keyword">each</span> <span class="keyword">of</span> <span class="keyword">the</span> pages that has been marked <span class="built_in">to</span> be</div><div class="line">              freed but has <span class="keyword">not</span> yet been freed, <span class="keyword">the</span> free operation will be</div><div class="line">              canceled <span class="keyword">if</span> <span class="keyword">the</span> caller writes <span class="keyword">into</span> <span class="keyword">the</span> page.  After <span class="keyword">a</span></div><div class="line">              successful MADV_FREE operation, <span class="keyword">any</span> stale data (i.e., dirty,</div><div class="line">              unwritten pages) will be lost when <span class="keyword">the</span> kernel frees <span class="keyword">the</span> pages.</div><div class="line">              However, subsequent writes <span class="built_in">to</span> pages <span class="keyword">in</span> <span class="keyword">the</span> range will succeed</div><div class="line">              <span class="keyword">and</span> <span class="keyword">then</span> kernel cannot free those dirtied pages, so that <span class="keyword">the</span></div><div class="line">              caller can always see just written data.  If there is no</div><div class="line">              subsequent <span class="built_in">write</span>, <span class="keyword">the</span> kernel can free <span class="keyword">the</span> pages <span class="keyword">at</span> <span class="keyword">any</span> <span class="built_in">time</span>.</div><div class="line">              Once pages <span class="keyword">in</span> <span class="keyword">the</span> range have been freed, <span class="keyword">the</span> caller will see</div><div class="line">              <span class="literal">zero</span>-fill-<span class="keyword">on</span>-demand <span class="title">pages</span> <span class="title">upon</span> <span class="title">subsequent</span> <span class="title">page</span> <span class="title">references</span>.</div><div class="line"></div><div class="line">              The MADV_FREE operation can be applied only <span class="built_in">to</span> <span class="keyword">private</span></div><div class="line">              anonymous pages (see mmap(<span class="number">2</span>)).  In Linux <span class="keyword">before</span> <span class="built_in">version</span> <span class="number">4.12</span>,</div><div class="line">              when freeing pages <span class="keyword">on</span> <span class="title">a</span> <span class="title">swapless</span> <span class="title">system</span>, <span class="title">the</span> <span class="title">pages</span> <span class="title">in</span> <span class="title">the</span></div><div class="line">              given range are freed instantly, regardless <span class="keyword">of</span> memory</div><div class="line">              pressure.</div></pre></td></tr></table></figure>
+<figure class="highlight applescript"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div></pre></td><td class="code"><pre><div class="line">madvise(<span class="number">2</span>) <span class="keyword">is</span> a system call used <span class="keyword">by</span> processes <span class="keyword">to</span> <span class="keyword">tell</span> <span class="keyword">the</span> kernel how they are going <span class="keyword">to</span> use their memory, allowing <span class="keyword">the</span> kernel <span class="keyword">to</span> optimize <span class="keyword">the</span> memory management according <span class="keyword">to</span> these hints <span class="keyword">to</span> achieve better overall performance.</div><div class="line"></div><div class="line">When an <span class="built_in">application</span> wants <span class="keyword">to</span> signal <span class="keyword">the</span> kernel <span class="keyword">that</span> <span class="keyword">it</span> <span class="keyword">isn't</span> going <span class="keyword">to</span> use a range <span class="keyword">of</span> memory <span class="keyword">in</span> <span class="keyword">the</span> near future, <span class="keyword">it</span> can use <span class="keyword">the</span> MADV_DONTNEED flag, so <span class="keyword">the</span> kernel can free resources associated <span class="keyword">with</span> <span class="keyword">it</span>. Subsequent accesses <span class="keyword">in</span> <span class="keyword">the</span> range will succeed, <span class="keyword">but</span> will <span class="literal">result</span> either <span class="keyword">in</span> reloading <span class="keyword">of</span> <span class="keyword">the</span> memory <span class="built_in">contents</span> <span class="keyword">from</span> <span class="keyword">the</span> underlying mapped <span class="built_in">file</span> <span class="keyword">or</span> zero-fill-<span class="keyword">on</span>-demand pages <span class="keyword">for</span> mappings <span class="keyword">without</span> an underlying <span class="built_in">file</span>. But there are <span class="keyword">some</span> kind <span class="keyword">of</span> apps (notably, memory allocators) <span class="keyword">that</span> can reuse <span class="keyword">that</span> memory range <span class="keyword">after</span> a short <span class="built_in">time</span>, <span class="keyword">and</span> MADV_DONTNEED forces them <span class="keyword">to</span> incur <span class="keyword">in</span> page fault, page allocation, page zeroing, etc. For avoiding <span class="keyword">that</span> overhead, other OS like BSDs have supported MADV_FREE, which just mark pages <span class="keyword">as</span> available <span class="keyword">to</span> free <span class="keyword">if</span> needed, <span class="keyword">but</span> <span class="keyword">it</span> doesn't free them immediately, making possible <span class="keyword">to</span> reuse <span class="keyword">the</span> memory range <span class="keyword">without</span> incurring <span class="keyword">in</span> <span class="keyword">the</span> costs <span class="keyword">of</span> faulting <span class="keyword">the</span> pages again. This release adds Linux support <span class="keyword">for</span> this flag.</div><div class="line"></div><div class="line">Recommended LWN article: Volatile ranges <span class="keyword">and</span> MADV_FREE</div></pre></td></tr></table></figure>
+<p><a href="http://www.man7.org/linux/man-pages/man2/madvise.2.html" target="_blank" rel="external">madvise</a> 系统调用，会建议内核，在从 addr 指定的地址开始，长度等于 len 参数值的范围内，该区域的用户虚拟内存应遵循特定的使用模式，使内核可以选择适当的预读和缓存技术。如果使用 madvise() 函数的程序明确了解其内存访问模式，则使用此函数可以提高系统性能。</p>
+<p>自 4.5 开始，引入 MADV_FREE 参数（这是为什么 4.9 内核才出现该问题，这需要上层和底层同时支持，才会出现本问题）。简单来说，MADV_FREE 就是让上层设置一段内存可以释放内存的标志，但是底层并不会立即释放，以便让上层可以在短时间内重复访问，以免增加缺页异常等性能开销。也叫 lazy free.  它只能用于匿名页面。</p>
+<p>根据描述，触发 isolated file 统计增大的路径是：</p>
+<ul>
+<li>上层调用 madvise 系统调用，使用 MADV_FREE 时，清除 dirty bit 和 SwapBacked bit，把 lazyfree page 加入 inactive file list。</li>
+<li>PPR 增加 ISOLATE_FILES 计数（SwapBacked=0），隔离页面并触发回收</li>
+<li>上层访问 lazyfreed 页面，dirty=1</li>
+<li>PPR 执行 reclaim_pte_range -&gt; reclaim_pages_from_list -&gt; shrink_page_list -&gt;try_to_unmap -&gt; try_to_unmap_one 设置 SwapBacked=1,  并跳出回收</li>
+<li>PPR 继续执行 reclaim_pte_range -&gt; reclaim_pages_from_list，putback_lru_page 的时候，因为 SwapBacked=1，减少了 NR_ISOLATED_ANON 计数，而不是减少当初增加的 NR_ISOLATED_FILE 计数。</li>
+<li>导致 NR_ISOLATED_FILE 一直被增加</li>
+</ul>
+<p>所以，需要在 PPR 中过滤 lazyfree 页面，避免这个 NR_ISOLATED_FILE 计数异常，导致的卡 too_many_isolated.</p>
+<p>匿名页面一开始就会设置 SwapBacked=1, 并且只有在上层设置 lazyfree 页面时才会清除 ClearPageSwapBacked(page) ，没别的地方了。<br>所以，PageAnon(page) &amp;&amp; !PageSwapBacked(page) 能指示这是 lazyfree 页面。</p>
+<p>ok，已经理清了前因后果。再退一步，试想下，假如上游没有修复这个 patch。我们能不能想出来？我觉得不能，因为我们缺乏 madvise 的相关认知，并且它经过了 dirty, SwapBacked 标志的变化（几乎没办法做这么微观的页面标志追踪），才导致 NR_ISOLATED_ANON/FLIE 的变化。我们最多只能定位 PPR 模块导致而出 workaround.</p>
+  
+	</div>
+		<footer class="article-footer clearfix">
+<div class="article-catetags">
+
+<div class="article-categories">
+  <span></span>
+  <a class="article-category-link" href="/categories/性能与稳定性/">性能与稳定性</a>►<a class="article-category-link" href="/categories/性能与稳定性/BUG分析/">BUG分析</a>
+</div>
+
+
+  <div class="article-tags">
+  
+  <span></span> <a href="/tags/调试/">调试</a><a href="/tags/稳定性/">稳定性</a><a href="/tags/性能/">性能</a><a href="/tags/内存/">内存</a>
+  </div>
+
+</div>
+
+
+
+	<div class="article-share" id="share">
+	
+	<div class="share-jiathis">
+	  
+<div class="jiathis_style_24x24">
+	<a class="jiathis_button_tsina"></a>
+	<a class="jiathis_button_weixin"></a>
+	<a class="jiathis_button_renren"></a>
+	<a class="jiathis_button_qzone"></a>
+	<a class="jiathis_button_googleplus"></a>
+	<a class="jiathis_button_douban"></a>
+	<a href="http://www.jiathis.com/share" class="jiathis jiathis_txt jtico jtico_jiathis" target="_blank"></a>
+	<a class="jiathis_counter_style"></a>
+</div>
+<script type="text/javascript" >
+    var jiathis_config={
+    data_track_clickback:true,
+    sm:"copy,renren,cqq",
+    pic:"",
+    summary:"",
+     ralateuid:{"tsina":"1784586927"},hideMore:false}
+    
+  </script> 
+<script type="text/javascript" src="//v3.jiathis.com/code/jia.js?uid=
+" charset="utf-8"></script>      
+
+	 </div>
+	
+	</div>
+
+
+</footer>
+
+   	       
+	</article>
+	
+<nav class="article-nav clearfix">
+ 
+
+<div class="next">
+<a href="/2019/10/23//linux-dead-lock-detect-lockdep.html/"  title="Linux 死锁检测模块 Lockdep 简介">
+ <strong>下一篇：</strong><br/> 
+ <span>Linux 死锁检测模块 Lockdep 简介
+</span>
+</a>
+</div>
+
+</nav>
+
+	
+
+</div>  
+      <div class="openaside"><a class="navbutton" href="#" title="Show Sidebar"></a></div>
+
+  <div id="toc" class="toc-aside">
+  <strong class="toc-title">Contents</strong>
+ 
+ <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#Description"><span class="toc-number">1.</span> <span class="toc-text">Description</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Analysis"><span class="toc-number">2.</span> <span class="toc-text">Analysis</span></a></li></ol>
+ 
+  </div>
+
+<div id="asidepart">
+<div class="closeaside"><a class="closebutton" href="#" title="Hide Sidebar"></a></div>
+<aside class="clearfix">
+
+  
+<div class="categorieslist">
+	<p class="asidetitle">Categories</p>
+		<ul>
+		
+		  
+			<li><a href="/categories/性能与稳定性/BUG分析/" title="BUG分析">BUG分析<sup>1</sup></a></li>
+		  
+		
+		  
+			<li><a href="/categories/性能与稳定性/" title="性能与稳定性">性能与稳定性<sup>3</sup></a></li>
+		  
+		
+		</ul>
+</div>
+
+
+  
+<div class="tagslist">
+	<p class="asidetitle">Tags</p>
+		<ul class="clearfix">
+		
+			
+				<li><a href="/tags/调试/" title="调试">调试<sup>3</sup></a></li>
+			
+		
+			
+				<li><a href="/tags/稳定性/" title="稳定性">稳定性<sup>1</sup></a></li>
+			
+		
+			
+				<li><a href="/tags/性能/" title="性能">性能<sup>1</sup></a></li>
+			
+		
+			
+				<li><a href="/tags/内存/" title="内存">内存<sup>1</sup></a></li>
+			
+		
+		</ul>
+</div>
+
+
+  <div class="linkslist">
+  <p class="asidetitle">Links</p>
+    <ul>
+        
+          <li>
+            
+            	<a href="http://kernel.meizu.com/" target="_blank" title="魅族内核团队">魅族内核团队</a>
+            
+          </li>
+        
+          <li>
+            
+            	<a href="http://blog.csdn.net/jianchi88" target="_blank" title="my old blog">my old blog</a>
+            
+          </li>
+        
+          <li>
+            
+            	<a href="http://wuchong.me/" target="_blank" title="Jark&#39;s Blog">Jark&#39;s Blog</a>
+            
+          </li>
+        
+          <li>
+            
+            	<a href="http://blog.xiaohansong.com/" target="_blank" title="xiaohansong">xiaohansong</a>
+            
+          </li>
+        
+    </ul>
+</div>
+
+  <div class="weiboshow">
+  <p class="asidetitle">Weibo</p>
+    <iframe width="100%" height="119" class="share_self"  frameborder="0" scrolling="no" src="http://widget.weibo.com/weiboshow/index.php?language=&width=0&height=119&fansRow=2&ptype=1&speed=0&skin=9&isTitle=1&noborder=1&isWeibo=0&isFans=0&uid=1784586927&verifier=842702c1&dpc=1"></iframe>
+</div>
+
+
+</aside>
+</div>
+    </div>
+    <footer><div id="footer" >
+	
+	<div class="line">
+		<span></span>
+		<div class="author"></div>
+	</div>
+	
+	
+	<section class="info">
+		<p> Hello ,I&#39;m Lotte-Bai in MEIZU. <br/>
+			This is my blog, believe it or not.</p>
+	</section>
+	 
+	<div class="social-font" class="clearfix">
+		
+		<a href="http://weibo.com/1784586927" target="_blank" class="icon-weibo" title="微博"></a>
+		
+		
+		<a href="https://github.com/Lotte-Bai" target="_blank" class="icon-github" title="github"></a>
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		<a href="mailto:baihaowen08@126.com" target="_blank" class="icon-email" title="Email Me"></a>
+		
+	</div>
+			
+		
+
+		<p class="copyright">
+		Powered by <a href="http://hexo.io" target="_blank" title="hexo">hexo</a> and Theme by <a href="https://github.com/wuchong/jacman" target="_blank" title="Jacman">Jacman</a> © 2019 
+		
+		<a href="/about" target="_blank" title="Lotte">Lotte</a>
+		
+		
+		</p>
+</div>
+</footer>
+    <script src="/js/jquery-2.0.3.min.js"></script>
+<script src="/js/jquery.imagesloaded.min.js"></script>
+<script src="/js/gallery.js"></script>
+<script src="/js/jquery.qrcode-0.12.0.min.js"></script>
+
+<script type="text/javascript">
+$(document).ready(function(){ 
+  $('.navbar').click(function(){
+    $('header nav').toggleClass('shownav');
+  });
+  var myWidth = 0;
+  function getSize(){
+    if( typeof( window.innerWidth ) == 'number' ) {
+      myWidth = window.innerWidth;
+    } else if( document.documentElement && document.documentElement.clientWidth) {
+      myWidth = document.documentElement.clientWidth;
+    };
+  };
+  var m = $('#main'),
+      a = $('#asidepart'),
+      c = $('.closeaside'),
+      o = $('.openaside');
+  c.click(function(){
+    a.addClass('fadeOut').css('display', 'none');
+    o.css('display', 'block').addClass('fadeIn');
+	$('#toc.toc-aside').css('display', 'block').addClass('fadeIn');
+    m.addClass('moveMain');
+  });
+  o.click(function(){
+    o.css('display', 'none').removeClass('beforeFadeIn');
+    a.css('display', 'block').removeClass('fadeOut').addClass('fadeIn');      
+    m.removeClass('moveMain');
+  });
+  $(window).scroll(function(){
+    o.css("top",Math.max(80,260-$(this).scrollTop()));
+  });
+  
+        getSize();
+        if (myWidth >= 1024) {
+          c.click();
+        }
+  
+  $(window).resize(function(){
+    getSize(); 
+    if (myWidth >= 1024) {
+      $('header nav').removeClass('shownav');
+    }else{
+      m.removeClass('moveMain');
+      a.css('display', 'block').removeClass('fadeOut');
+      o.css('display', 'none');
+      
+      $('#toc.toc-aside').css('display', 'none');
+        
+    }
+  });
+});
+</script>
+
+<script type="text/javascript">
+$(document).ready(function(){ 
+  var ai = $('.article-content>iframe'),
+      ae = $('.article-content>embed'),
+      t  = $('#toc'),
+      ta = $('#toc.toc-aside'),
+      o  = $('.openaside'),
+      c  = $('.closeaside');
+  if(ai.length>0){
+    ai.wrap('<div class="video-container" />');
+  };
+  if(ae.length>0){
+   ae.wrap('<div class="video-container" />');
+  };
+  c.click(function(){
+    ta.css('display', 'block').addClass('fadeIn');
+  });
+  o.click(function(){
+    ta.css('display', 'none');
+  });
+  $(window).scroll(function(){
+    ta.css("top",Math.max(140,320-$(this).scrollTop()));
+  });
+});
+</script>
+
+
+
+
+
+
+
+
+
+
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.css" media="screen" type="text/css">
+<script src="/fancybox/jquery.fancybox.pack.js"></script>
+<script type="text/javascript">
+$(document).ready(function(){ 
+  $('.article-content').each(function(i){
+    $(this).find('img').each(function(){
+      if ($(this).parent().hasClass('fancybox')) return;
+      var alt = this.alt;
+      if (alt) $(this).after('<span class="caption">' + alt + '</span>');
+      $(this).wrap('<a href="' + this.src + '" title="' + alt + '" class="fancybox"></a>');
+    });
+    $(this).find('.fancybox').each(function(){
+      $(this).attr('rel', 'article' + i);
+    });
+  });
+  if($.fancybox){
+    $('.fancybox').fancybox();
+  }
+}); 
+</script>
+
+
+
+<!-- Analytics Begin -->
+
+
+
+<script>
+var _hmt = _hmt || [];
+(function() {
+  var hm = document.createElement("script");
+  hm.src = "//hm.baidu.com/hm.js?e6d1f421bbc9962127a50488f9ed37d1";
+  var s = document.getElementsByTagName("script")[0]; 
+  s.parentNode.insertBefore(hm, s);
+})();
+</script>
+
+
+
+<!-- Analytics End -->
+
+<!-- Totop Begin -->
+
+	<div id="totop">
+	<a title="Back to Top"><img src="/img/scrollup.png"/></a>
+	</div>
+	<script src="/js/totop.js"></script>
+
+<!-- Totop End -->
+
+<!-- MathJax Begin -->
+<!-- mathjax config similar to math.stackexchange -->
+
+
+<!-- MathJax End -->
+
+<!-- Tiny_search Begin -->
+
+<!-- Tiny_search End -->
+
+  </body>
+</html>
