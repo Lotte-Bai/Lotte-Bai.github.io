@@ -21,7 +21,7 @@ AnalysisLOG：
 <meta property="og:description" content="Description一个项目中偶现几十上百个 D 进程卡住在 shrink_inactive_list，导致卡顿/卡死/android SWT 等问题，前前后后，提交了 3 次修复，还没有彻底解决。
 AnalysisLOG：
 1234567891011121314151617181920212223242526272829303132333435363738394041424344[149459">
-<meta property="og:image" content="http://lotte-bai.github.io/D_state_processes_stuck_in_shrink_inactive_list//systrace_D.jpg">
+<meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/25//D_state_processes_stuck_in_shrink_inactive_list.html/systrace_D.jpg">
 <meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/25//D_state_processes_stuck_in_shrink_inactive_list.html/page_cache1.png">
 <meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/25//D_state_processes_stuck_in_shrink_inactive_list.html/kswapd1.png">
 <meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/25//D_state_processes_stuck_in_shrink_inactive_list.html/kswapd2.png">
@@ -31,13 +31,13 @@ AnalysisLOG：
 <meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/25//D_state_processes_stuck_in_shrink_inactive_list.html/mm_vmscan_lru_shrink_inactive.png">
 <meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/25//D_state_processes_stuck_in_shrink_inactive_list.html/mm_vmscan_writepage.png">
 <meta property="og:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/25//D_state_processes_stuck_in_shrink_inactive_list.html/global_dirty_state.png">
-<meta property="og:updated_time" content="2019-10-25T03:37:19.302Z">
+<meta property="og:updated_time" content="2019-10-25T03:40:45.483Z">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="一个不按常规出牌的性能 BUG 分析: 大量 D 进程卡在 shrink_inactive_list">
 <meta name="twitter:description" content="Description一个项目中偶现几十上百个 D 进程卡住在 shrink_inactive_list，导致卡顿/卡死/android SWT 等问题，前前后后，提交了 3 次修复，还没有彻底解决。
 AnalysisLOG：
 1234567891011121314151617181920212223242526272829303132333435363738394041424344[149459">
-<meta name="twitter:image" content="http://lotte-bai.github.io/D_state_processes_stuck_in_shrink_inactive_list//systrace_D.jpg">
+<meta name="twitter:image" content="http://lotte-bai.github.io//lotte-bai.github.io/2019/10/25//D_state_processes_stuck_in_shrink_inactive_list.html/systrace_D.jpg">
 
     
     <link rel="alternative" href="/atom.xml" title="Lotte&#39;s Blog" type="application/atom+xml">
@@ -65,7 +65,7 @@ AnalysisLOG：
 				<h1 class="site-name"><a href="/" title="Lotte&#39;s Blog">Lotte&#39;s Blog</a></h1>
 				<h2 class="blog-motto">探索、记录、分享、生活</h2>
 			</div>
-			<div class="navbar"><a class="navbutton navmobile" href="#" title="菜單">
+			<div class="navbar"><a class="navbutton navmobile" href="#" title="Menu">
 			</a></div>
 			<nav class="animated">
 				<ul>
@@ -81,7 +81,7 @@ AnalysisLOG：
  					
 					<form class="search" action="//google.com/search" method="get" accept-charset="utf-8">
 						<label>Search</label>
-						<input type="search" id="search" name="q" autocomplete="off" maxlength="20" placeholder="搜索" />
+						<input type="search" id="search" name="q" autocomplete="off" maxlength="20" placeholder="Search" />
 						<input type="hidden" name="q" value="site:lotte-bai.github.io">
 					</form>
 					
@@ -104,14 +104,14 @@ AnalysisLOG：
 		<a href="/about" title="Lotte" target="_blank" itemprop="author">Lotte</a>
 		
   <p class="article-time">
-    <time datetime="2019-10-25T03:37:19.122Z" itemprop="datePublished"> 發表於 2019-10-25</time>
+    <time datetime="2019-10-25T03:40:45.419Z" itemprop="datePublished"> Published 2019-10-25</time>
     
   </p>
 </header>
 	<div class="article-content">
 		
 		<div id="toc" class="toc-article">
-			<strong class="toc-title">文章目錄</strong>
+			<strong class="toc-title">Contents</strong>
 		
 			<ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#Description"><span class="toc-number">1.</span> <span class="toc-text">Description</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Analysis"><span class="toc-number">2.</span> <span class="toc-text">Analysis</span></a></li></ol>
 		
@@ -125,7 +125,7 @@ AnalysisLOG：
 <p>初步定位：</p>
 <p>该函数已经有跳出功能，不会一直卡住，最多 2 次就会退出去。<br>说明是大量的进程疯狂地调用 shrink_inactive_list 又被阻塞了一下子，又退出去，又掉进来。所以，不是一直卡死，而是性能瓶颈拥堵在这个地方，congestion.</p>
 <p>从上层 systrace 也能看到，很有规律的大概 110ms 一段的 D 状态，一个进程甚至可以持续几十秒。</p>
-<p><img src="D_state_processes_stuck_in_shrink_inactive_list//systrace_D.jpg" alt="systrace"> </p>
+<p><img src="//lotte-bai.github.io/2019/10/25//D_state_processes_stuck_in_shrink_inactive_list.html/systrace_D.jpg" alt="systrace"> </p>
 <p>说明隔离页面过多，sleep 100ms，猜测目的是 1. 给时间处理隔离页面，回写文件页到磁盘 2. 是控制并发，也许另一个 cpu 也在同样的回收流程导致隔离页这在时刻变大。</p>
 <p>所以初步定了两个方向，疑点：</p>
 <p>一是内存回收瓶颈，内存回收不及时，内存需求量巨大，而 LMK 没触发，内存有很多匿名页，都在回收和回写文件页等。<br>二是 io 读写瓶颈，io 速率慢，某个时间段速率变慢，ufs 频率低，上层读写大量数据，io 占用率过高等。</p>
@@ -269,9 +269,9 @@ AnalysisLOG：
  
 
 <div class="next">
-<a href="/2019/10/23//qcom_dump_ftrace_and_using_kernelshark.html/"  title="高通 dump ftrace &amp; kernelshark 使用">
+<a href="/2019/10/23//linux-dead-lock-detect-lockdep.html/"  title="Linux 死锁检测模块 Lockdep 简介">
  <strong>下一篇：</strong><br/> 
- <span>高通 dump ftrace &amp; kernelshark 使用
+ <span>Linux 死锁检测模块 Lockdep 简介
 </span>
 </a>
 </div>
@@ -281,22 +281,22 @@ AnalysisLOG：
 	
 
 </div>  
-      <div class="openaside"><a class="navbutton" href="#" title="顯示側邊欄"></a></div>
+      <div class="openaside"><a class="navbutton" href="#" title="Show Sidebar"></a></div>
 
   <div id="toc" class="toc-aside">
-  <strong class="toc-title">文章目錄</strong>
+  <strong class="toc-title">Contents</strong>
  
  <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#Description"><span class="toc-number">1.</span> <span class="toc-text">Description</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#Analysis"><span class="toc-number">2.</span> <span class="toc-text">Analysis</span></a></li></ol>
  
   </div>
 
 <div id="asidepart">
-<div class="closeaside"><a class="closebutton" href="#" title="隱藏側邊欄"></a></div>
+<div class="closeaside"><a class="closebutton" href="#" title="Hide Sidebar"></a></div>
 <aside class="clearfix">
 
   
 <div class="categorieslist">
-	<p class="asidetitle">分類</p>
+	<p class="asidetitle">Categories</p>
 		<ul>
 		
 		  
@@ -313,7 +313,7 @@ AnalysisLOG：
 
   
 <div class="tagslist">
-	<p class="asidetitle">標簽</p>
+	<p class="asidetitle">Tags</p>
 		<ul class="clearfix">
 		
 			
@@ -337,7 +337,7 @@ AnalysisLOG：
 
 
   <div class="linkslist">
-  <p class="asidetitle">友情鏈接</p>
+  <p class="asidetitle">Links</p>
     <ul>
         
           <li>
@@ -368,7 +368,7 @@ AnalysisLOG：
 </div>
 
   <div class="weiboshow">
-  <p class="asidetitle">新浪微博</p>
+  <p class="asidetitle">Weibo</p>
     <iframe width="100%" height="119" class="share_self"  frameborder="0" scrolling="no" src="http://widget.weibo.com/weiboshow/index.php?language=&width=0&height=119&fansRow=2&ptype=1&speed=0&skin=9&isTitle=1&noborder=1&isWeibo=0&isFans=0&uid=1784586927&verifier=842702c1&dpc=1"></iframe>
 </div>
 
@@ -556,7 +556,7 @@ var _hmt = _hmt || [];
 <!-- Totop Begin -->
 
 	<div id="totop">
-	<a title="返回頂部"><img src="/img/scrollup.png"/></a>
+	<a title="Back to Top"><img src="/img/scrollup.png"/></a>
 	</div>
 	<script src="/js/totop.js"></script>
 
