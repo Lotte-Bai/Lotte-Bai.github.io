@@ -88,7 +88,7 @@
 123456789101112131415161718</p>
         
     
-    <time datetime="2019-10-28T05:08:31.699Z" itemprop="datePublished">2019-10-28</time>
+    <time datetime="2019-10-28T05:51:34.571Z" itemprop="datePublished">2019-10-28</time>
   </a>
 </section>
 
@@ -100,15 +100,17 @@
   
 <section class="post" itemscope itemprop="blogitem">
   
-    <a href="/2019/10/23//qcom_dump_ftrace_and_using_kernelshark.html/" title="高通 dump ftrace &amp; kernelshark 使用" itemprop="url">
+    <a href="/2019/10/25//D_state_processes_stuck_in_shrink_inactive_list.html/" title="一个不按常规出牌的性能 BUG 分析: 大量 D 进程卡在 shrink_inactive_list" itemprop="url">
   
-    <h1 itemprop="name">高通 dump ftrace &amp; kernelshark 使用</h1>
+    <h1 itemprop="name">一个不按常规出牌的性能 BUG 分析: 大量 D 进程卡在 shrink_inactive_list</h1>
     
      
-           <p itemprop="description" >简介高通 ramdump 可以解析出 ftrace，方便用于追踪 快省稳 问题。kernelshark 是一个可以查看 trace event 的图形化工具，方便梳理和观察内核微观行为。trace-cmd 是设置读取 ftrace 的命令行工具，kernelshark既可以记录数</p>
+           <p itemprop="description" >Description一个项目中偶现几十上百个 D 进程卡住在 shrink_inactive_list，导致卡顿/卡死/android SWT 等问题，前前后后，提交了 3 次修复，还没有彻底解决。
+AnalysisLOG：
+12345678910111213141516171</p>
         
     
-    <time datetime="2019-10-23T06:28:30.883Z" itemprop="datePublished">2019-10-23</time>
+    <time datetime="2019-10-25T03:40:45.419Z" itemprop="datePublished">2019-10-25</time>
   </a>
 </section>
 
@@ -127,6 +129,26 @@
      
            <p itemprop="description" >死锁概念死锁是指多个进程（线程）因为长久等待已被其他进程占有的的资源而陷入阻塞的一种状态。当等待的资源一直得不到释放，死锁会一直持续下去。死锁一旦发生，程序本身是解决不了的，只能依靠外部力量使得程序恢复运行，例如重启，开门狗复位等。
 Linux 提供了检测死锁的机制，主要分为 D</p>
+        
+    
+    <time datetime="2019-10-23T06:28:30.883Z" itemprop="datePublished">2019-10-23</time>
+  </a>
+</section>
+
+
+
+
+
+
+  
+<section class="post" itemscope itemprop="blogitem">
+  
+    <a href="/2019/10/23//qcom_dump_ftrace_and_using_kernelshark.html/" title="高通 dump ftrace &amp; kernelshark 使用" itemprop="url">
+  
+    <h1 itemprop="name">高通 dump ftrace &amp; kernelshark 使用</h1>
+    
+     
+           <p itemprop="description" >简介高通 ramdump 可以解析出 ftrace，方便用于追踪 快省稳 问题。kernelshark 是一个可以查看 trace event 的图形化工具，方便梳理和观察内核微观行为。trace-cmd 是设置读取 ftrace 的命令行工具，kernelshark既可以记录数</p>
         
     
     <time datetime="2019-10-23T06:28:30.883Z" itemprop="datePublished">2019-10-23</time>
@@ -172,11 +194,11 @@ Linux 提供了检测死锁的机制，主要分为 D</p>
 		<ul>
 		
 		  
-			<li><a href="/categories/性能与稳定性/BUG分析/" title="BUG分析">BUG分析<sup>1</sup></a></li>
+			<li><a href="/categories/性能与稳定性/BUG分析/" title="BUG分析">BUG分析<sup>2</sup></a></li>
 		  
 		
 		  
-			<li><a href="/categories/性能与稳定性/" title="性能与稳定性">性能与稳定性<sup>3</sup></a></li>
+			<li><a href="/categories/性能与稳定性/" title="性能与稳定性">性能与稳定性<sup>4</sup></a></li>
 		  
 		
 		</ul>
@@ -189,19 +211,19 @@ Linux 提供了检测死锁的机制，主要分为 D</p>
 		<ul class="clearfix">
 		
 			
-				<li><a href="/tags/调试/" title="调试">调试<sup>3</sup></a></li>
+				<li><a href="/tags/调试/" title="调试">调试<sup>4</sup></a></li>
 			
 		
 			
-				<li><a href="/tags/稳定性/" title="稳定性">稳定性<sup>1</sup></a></li>
+				<li><a href="/tags/稳定性/" title="稳定性">稳定性<sup>2</sup></a></li>
 			
 		
 			
-				<li><a href="/tags/性能/" title="性能">性能<sup>1</sup></a></li>
+				<li><a href="/tags/性能/" title="性能">性能<sup>2</sup></a></li>
 			
 		
 			
-				<li><a href="/tags/内存/" title="内存">内存<sup>1</sup></a></li>
+				<li><a href="/tags/内存/" title="内存">内存<sup>2</sup></a></li>
 			
 		
 		</ul>
