@@ -63,7 +63,7 @@ D 状态死锁
 				<h1 class="site-name"><a href="/" title="Lotte&#39;s Blog">Lotte&#39;s Blog</a></h1>
 				<h2 class="blog-motto">探索、记录、分享、生活</h2>
 			</div>
-			<div class="navbar"><a class="navbutton navmobile" href="#" title="Menu">
+			<div class="navbar"><a class="navbutton navmobile" href="#" title="菜单">
 			</a></div>
 			<nav class="animated">
 				<ul>
@@ -79,7 +79,7 @@ D 状态死锁
  					
 					<form class="search" action="//google.com/search" method="get" accept-charset="utf-8">
 						<label>Search</label>
-						<input type="search" id="search" name="q" autocomplete="off" maxlength="20" placeholder="Search" />
+						<input type="search" id="search" name="q" autocomplete="off" maxlength="20" placeholder="搜索" />
 						<input type="hidden" name="q" value="site:lotte-bai.github.io">
 					</form>
 					
@@ -102,14 +102,14 @@ D 状态死锁
 		<a href="/about" title="Lotte" target="_blank" itemprop="author">Lotte</a>
 		
   <p class="article-time">
-    <time datetime="2019-10-23T06:28:30.883Z" itemprop="datePublished"> Published 2019-10-23</time>
+    <time datetime="2019-10-23T06:28:30.883Z" itemprop="datePublished"> 发表于 2019-10-23</time>
     
   </p>
 </header>
 	<div class="article-content">
 		
 		<div id="toc" class="toc-article">
-			<strong class="toc-title">Contents</strong>
+			<strong class="toc-title">文章目录</strong>
 		
 			<ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#死锁概念"><span class="toc-number">1.</span> <span class="toc-text">死锁概念</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#AB-BA-死锁的形成"><span class="toc-number">2.</span> <span class="toc-text">AB-BA 死锁的形成</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#lockdep-死锁检测模块"><span class="toc-number">3.</span> <span class="toc-text">lockdep 死锁检测模块</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#1-相关内核配置选项"><span class="toc-number">3.1.</span> <span class="toc-text">1. 相关内核配置选项</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-基本实现"><span class="toc-number">3.2.</span> <span class="toc-text">2. 基本实现</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-检查规则"><span class="toc-number">3.3.</span> <span class="toc-text">3. 检查规则</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#4-使用实例"><span class="toc-number">3.4.</span> <span class="toc-text">4. 使用实例</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#参考资料"><span class="toc-number">3.5.</span> <span class="toc-text">参考资料</span></a></li></ol></li></ol>
 		
@@ -356,10 +356,10 @@ D 状态死锁
 <nav class="article-nav clearfix">
  
  <div class="prev" >
- <a href="/2019/10/28//D_state_processes_stuck_in_shrink_inactive_list.html/" title="一个不按常规出牌的性能 BUG 分析: 大量 D 进程卡在 shrink_inactive_list">
+ <a href="/2019/10/28//D_state_processes_stuck_in_shrink_inactive_list.html/" title="记一次非常规性能 BUG 分析: 大量 D 进程卡在 shrink_inactive_list">
   <strong>上一篇：</strong><br/>
   <span>
-  一个不按常规出牌的性能 BUG 分析: 大量 D 进程卡在 shrink_inactive_list</span>
+  记一次非常规性能 BUG 分析: 大量 D 进程卡在 shrink_inactive_list</span>
 </a>
 </div>
 
@@ -377,22 +377,22 @@ D 状态死锁
 	
 
 </div>  
-      <div class="openaside"><a class="navbutton" href="#" title="Show Sidebar"></a></div>
+      <div class="openaside"><a class="navbutton" href="#" title="显示侧边栏"></a></div>
 
   <div id="toc" class="toc-aside">
-  <strong class="toc-title">Contents</strong>
+  <strong class="toc-title">文章目录</strong>
  
  <ol class="toc"><li class="toc-item toc-level-2"><a class="toc-link" href="#死锁概念"><span class="toc-number">1.</span> <span class="toc-text">死锁概念</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#AB-BA-死锁的形成"><span class="toc-number">2.</span> <span class="toc-text">AB-BA 死锁的形成</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#lockdep-死锁检测模块"><span class="toc-number">3.</span> <span class="toc-text">lockdep 死锁检测模块</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#1-相关内核配置选项"><span class="toc-number">3.1.</span> <span class="toc-text">1. 相关内核配置选项</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#2-基本实现"><span class="toc-number">3.2.</span> <span class="toc-text">2. 基本实现</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#3-检查规则"><span class="toc-number">3.3.</span> <span class="toc-text">3. 检查规则</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#4-使用实例"><span class="toc-number">3.4.</span> <span class="toc-text">4. 使用实例</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#参考资料"><span class="toc-number">3.5.</span> <span class="toc-text">参考资料</span></a></li></ol></li></ol>
  
   </div>
 
 <div id="asidepart">
-<div class="closeaside"><a class="closebutton" href="#" title="Hide Sidebar"></a></div>
+<div class="closeaside"><a class="closebutton" href="#" title="隐藏侧边栏"></a></div>
 <aside class="clearfix">
 
   
 <div class="categorieslist">
-	<p class="asidetitle">Categories</p>
+	<p class="asidetitle">分类</p>
 		<ul>
 		
 		  
@@ -409,7 +409,7 @@ D 状态死锁
 
   
 <div class="tagslist">
-	<p class="asidetitle">Tags</p>
+	<p class="asidetitle">标签</p>
 		<ul class="clearfix">
 		
 			
@@ -433,7 +433,7 @@ D 状态死锁
 
 
   <div class="linkslist">
-  <p class="asidetitle">Links</p>
+  <p class="asidetitle">友情链接</p>
     <ul>
         
           <li>
@@ -464,7 +464,7 @@ D 状态死锁
 </div>
 
   <div class="weiboshow">
-  <p class="asidetitle">Weibo</p>
+  <p class="asidetitle">新浪微博</p>
     <iframe width="100%" height="119" class="share_self"  frameborder="0" scrolling="no" src="http://widget.weibo.com/weiboshow/index.php?language=&width=0&height=119&fansRow=2&ptype=1&speed=0&skin=9&isTitle=1&noborder=1&isWeibo=0&isFans=0&uid=1784586927&verifier=842702c1&dpc=1"></iframe>
 </div>
 
@@ -652,7 +652,7 @@ var _hmt = _hmt || [];
 <!-- Totop Begin -->
 
 	<div id="totop">
-	<a title="Back to Top"><img src="/img/scrollup.png"/></a>
+	<a title="返回顶部"><img src="/img/scrollup.png"/></a>
 	</div>
 	<script src="/js/totop.js"></script>
 
